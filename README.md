@@ -210,6 +210,66 @@ Matrix is pre-configured for **Neon serverless Postgres** with SSL and connectio
 
 ---
 
+## ▲ Deploying Backend to Vercel
+
+The backend is pre-configured with `backend/vercel.json` and WSGI serverless handlers.
+
+1. **Push your code to GitHub**:
+   ```bash
+   git add .
+   git commit -m "feat: add Vercel deployment and APK build config"
+   git push origin main
+   ```
+
+2. **Import into Vercel**:
+   - Go to [vercel.com](https://vercel.com) and click **"Add New Project"**.
+   - Import your GitHub repository (`Matrix-Check-list`).
+   - In **Root Directory**, click Edit and select **`backend`**.
+   - Under **Environment Variables**, add:
+     - `DATABASE_URL`: Your Neon PostgreSQL connection string (including `?sslmode=require`)
+     - `SECRET_KEY`: A secure random secret key string
+     - `DEBUG`: `False`
+     - `ALLOWED_HOSTS`: `*`
+   - Click **Deploy**.
+
+3. **Verify Deployment**:
+   - Your API will be live at `https://<your-project>.vercel.app/api/today/`.
+
+---
+
+## 📱 Building the Android APK (Install on your phone)
+
+Matrix includes `eas.json` configured for direct `.apk` output without Google Play dependencies.
+
+1. **Update API URL in frontend**:
+   In `frontend/Matrix/.env`, set your live Vercel backend URL:
+   ```env
+   EXPO_PUBLIC_API_URL=https://<your-project>.vercel.app/api
+   ```
+
+2. **Install EAS CLI**:
+   ```bash
+   npm install -g eas-cli
+   ```
+
+3. **Log in to Expo**:
+   ```bash
+   eas login
+   ```
+   *(If you don't have an Expo account, create a free one at [expo.dev](https://expo.dev).)*
+
+4. **Trigger the Cloud APK Build**:
+   ```bash
+   cd frontend/Matrix
+   eas build -p android --profile preview
+   ```
+
+5. **Install on your phone**:
+   - When the build finishes (usually 3–5 minutes), EAS will print a **direct download link** and a **QR Code**.
+   - Scan the QR code or open the link on your Android phone to download and install the `Matrix.apk`!
+
+---
+
 ## 📡 Core API Reference
 
 | Method | Endpoint | Description |

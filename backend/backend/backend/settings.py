@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env")
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "changeme-in-production")
-DEBUG = os.environ.get("DEBUG", "True") in ("True", "true", "1")
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+DEBUG = os.getenv("DEBUG", "False") == "True"
+SECRET_KEY = os.environ["SECRET_KEY"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".vercel.app"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -115,11 +115,8 @@ SPECTACULAR_SETTINGS = {
 }
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8081",
-    "http://10.0.2.2:8081",
-]
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 # ── Password validation ───────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
