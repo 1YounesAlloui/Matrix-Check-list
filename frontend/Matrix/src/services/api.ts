@@ -17,15 +17,16 @@ import {
 
 // Fallback host resolution for Web, Android emulator, and LAN
 const getDefaultBaseUrl = () => {
+  // Always use the explicitly configured API URL if provided (Vercel, production, etc.)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || '127.0.0.1';
     return `http://${host}:8000/api`;
   }
   if (Platform.OS === 'android') {
-    return process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000/api';
-  }
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    return 'http://10.0.2.2:8000/api';
   }
   return 'http://127.0.0.1:8000/api';
 };
