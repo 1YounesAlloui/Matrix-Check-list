@@ -45,11 +45,11 @@ export default function TodayScreen() {
         {
           text: 'Send Test Now',
           onPress: async () => {
-            const success = await sendTestNotification();
-            if (success) {
+            const res = await sendTestNotification();
+            if (res.success) {
               Alert.alert('Notification Sent! 🔔', 'Check your device notifications.');
             } else {
-              Alert.alert('Permission Required', 'Please enable notifications in your device settings.');
+              Alert.alert('Notice', res.message || 'Please enable notifications in device settings.');
             }
           },
         },

@@ -4,6 +4,7 @@ export type TaskPriority = 'low' | 'normal' | 'high';
 export interface ScheduleConfig {
   weekdays?: number[]; // 0=Mon, 6=Sun
   interval?: number;
+  date?: string;
 }
 
 export interface User {

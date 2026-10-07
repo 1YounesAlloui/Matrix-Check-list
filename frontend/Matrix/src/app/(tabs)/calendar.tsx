@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -32,11 +31,6 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Radius, Spacing, Typography } from '@/constants/theme';
 import { CalendarDayItem } from '@/types/api';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-// Account for: scroll padding (Spacing.lg*2) + card padding (Spacing.md*2) + 6 gaps of 2px
-const DAY_SIZE = Math.floor((SCREEN_WIDTH - Spacing.lg * 2 - Spacing.md * 2 - 12) / 7);
-const DAY_HEIGHT = Math.floor(DAY_SIZE * 1.45);
-
 const MOOD_EMOJI: Record<number, string> = {
   1: '😫', 2: '😕', 3: '😐', 4: '🙂', 5: '🤩',
 };
@@ -44,14 +38,14 @@ const MOOD_EMOJI: Record<number, string> = {
 const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function CalendarScreen() {
-  const { colors } = useThemeColors();
+  const { colors, isDark } = useThemeColors();
 
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedPlanId, setSelectedPlanId] = useState<number | undefined>(undefined);
   const [activeDateStr, setActiveDateStr] = useState<string | null>(null);
 
-  // Calculate start and end for query
+  // Calculate start and end for query (always starting on Monday)
   const dateRange = useMemo(() => {
     if (viewMode === 'month') {
       const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
@@ -77,7 +71,7 @@ export default function CalendarScreen() {
     plan: selectedPlanId,
   });
 
-  // Map days by date string for quick O(1) lookup
+  // Map days by date string for O(1) lookup
   const daysMap = useMemo(() => {
     const map = new Map<string, CalendarDayItem>();
     calendarData?.days.forEach((day) => {
@@ -86,11 +80,16 @@ export default function CalendarScreen() {
     return map;
   }, [calendarData]);
 
-  // Days list to render in calendar grid
-  const daysToRender = useMemo(() => {
+  // Break calendar interval into exactly 7-day rows to guarantee 100% alignment
+  const weeks = useMemo(() => {
     const start = parseISO(dateRange.start);
     const end = parseISO(dateRange.end);
-    return eachDayOfInterval({ start, end });
+    const allDays = eachDayOfInterval({ start, end });
+    const result: Date[][] = [];
+    for (let i = 0; i < allDays.length; i += 7) {
+      result.push(allDays.slice(i, i + 7));
+    }
+    return result;
   }, [dateRange]);
 
   const handlePrev = () => {
@@ -111,21 +110,136 @@ export default function CalendarScreen() {
 
   const handleToday = () => {
     setCurrentDate(new Date());
+    setActiveDateStr(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const getHeatmapColor = (day: CalendarDayItem | undefined) => {
-    if (!day || day.scheduled_plans_count === 0) return colors.emptyHeatmap;
-    if (day.is_skipped) return colors.skip + '40';
+  /**
+   * High-contrast styling for calendar cells in both dark and light modes
+   */
+  const getDayCellStyle = (
+    dayItem: CalendarDayItem | undefined,
+    isToday: boolean,
+    isSelected: boolean,
+    isCurrentMonth: boolean
+  ) => {
+    const pct = dayItem?.completion_percentage ?? 0;
+    const hasPlans = (dayItem?.scheduled_plans_count ?? 0) > 0;
+    const isSkipped = !!dayItem?.is_skipped;
 
-    const pct = day.completion_percentage;
-    if (pct === 0) return colors.cardElevated;
-    if (pct < 40) return colors.primary + '30';
-    if (pct < 70) return colors.primary + '60';
-    if (pct < 100) return colors.primary + '90';
-    return colors.primary; // 100%
+    if (isDark) {
+      // ── DARK THEME ──────────────────────────────────────────────────────────
+      let bg = '#111714';
+      let border = '#1B2921';
+      let textColor = '#94A3B8';
+      let isComplete = false;
+
+      if (isSkipped) {
+        bg = '#1E2522';
+        border = '#374151';
+        textColor = '#64748B';
+      } else if (hasPlans) {
+        if (pct === 100) {
+          bg = '#10B981'; // Vibrant emerald highlight
+          border = '#34D399';
+          textColor = '#FFFFFF';
+          isComplete = true;
+        } else if (pct >= 50) {
+          bg = 'rgba(16, 185, 129, 0.42)';
+          border = '#10B981';
+          textColor = '#A7F3D0';
+        } else if (pct > 0) {
+          bg = 'rgba(16, 185, 129, 0.22)';
+          border = 'rgba(16, 185, 129, 0.45)';
+          textColor = '#6EE7B7';
+        } else {
+          // Scheduled but 0% completed
+          bg = '#16231B';
+          border = '#2A4333';
+          textColor = '#F0FDF4';
+        }
+      } else {
+        // Empty day
+        bg = '#0F1612';
+        border = '#16221A';
+        textColor = '#64748B';
+      }
+
+      let borderWidth = 1;
+      if (isSelected) {
+        border = '#34D399';
+        borderWidth = 2;
+      } else if (isToday) {
+        border = '#10B981';
+        borderWidth = 2;
+      }
+
+      return {
+        backgroundColor: bg,
+        borderColor: border,
+        borderWidth,
+        textColor,
+        opacity: !isCurrentMonth ? 0.3 : 1,
+        isComplete,
+      };
+    } else {
+      // ── LIGHT THEME ─────────────────────────────────────────────────────────
+      let bg = '#FFFFFF';
+      let border = '#E2E8F0';
+      let textColor = '#475569';
+      let isComplete = false;
+
+      if (isSkipped) {
+        bg = '#F1F5F9';
+        border = '#CBD5E1';
+        textColor = '#94A3B8';
+      } else if (hasPlans) {
+        if (pct === 100) {
+          bg = '#10B981';
+          border = '#059669';
+          textColor = '#FFFFFF';
+          isComplete = true;
+        } else if (pct >= 50) {
+          bg = '#A7F3D0';
+          border = '#34D399';
+          textColor = '#065F46';
+        } else if (pct > 0) {
+          bg = '#D1FAE5';
+          border = '#A7F3D0';
+          textColor = '#047857';
+        } else {
+          // Scheduled 0%
+          bg = '#F0FDF4';
+          border = '#BBF7D0';
+          textColor = '#0F172A';
+        }
+      } else {
+        // Empty day
+        bg = '#F8FAF8';
+        border = '#E5E7EB';
+        textColor = '#94A3B8';
+      }
+
+      let borderWidth = 1;
+      if (isSelected) {
+        border = '#059669';
+        borderWidth = 2;
+      } else if (isToday) {
+        border = '#10B981';
+        borderWidth = 2;
+      }
+
+      return {
+        backgroundColor: bg,
+        borderColor: border,
+        borderWidth,
+        textColor,
+        opacity: !isCurrentMonth ? 0.35 : 1,
+        isComplete,
+      };
+    }
   };
 
-  const activePlan = plans?.find((p) => p.id === selectedPlanId);
+  const activeDayItem = activeDateStr ? daysMap.get(activeDateStr) : undefined;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -243,15 +357,15 @@ export default function CalendarScreen() {
       >
         {/* Navigation Bar (Prev / Next / Today) */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={handlePrev} style={[styles.navBtn, { borderColor: colors.border }]}>
+          <TouchableOpacity onPress={handlePrev} style={[styles.navBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Icon name="chevron-left" size={22} color={colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleToday} style={[styles.todayBtn, { borderColor: colors.border }]}>
+          <TouchableOpacity onPress={handleToday} style={[styles.todayBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[Typography.captionMedium, { color: colors.primary }]}>Today</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleNext} style={[styles.navBtn, { borderColor: colors.border }]}>
+          <TouchableOpacity onPress={handleNext} style={[styles.navBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Icon name="chevron-right" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -288,85 +402,107 @@ export default function CalendarScreen() {
 
         {/* Calendar Grid Card */}
         <View style={[styles.calendarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {/* Weekday Names */}
+          {/* Weekday Names Header (Mon to Sun) - 7 strictly equal columns */}
           <View style={styles.weekHeader}>
             {WEEKDAY_NAMES.map((name) => (
-              <Text key={name} style={[styles.weekDayText, { color: colors.textDim }]}>
-                {name}
-              </Text>
+              <View key={name} style={styles.colHeader}>
+                <Text style={[styles.weekDayText, { color: colors.textMuted }]}>{name}</Text>
+              </View>
             ))}
           </View>
 
-          {/* Days Grid */}
+          {/* Days Grid - Row-by-Row 7-column layout with perfect alignment */}
           <View style={styles.grid}>
-            {daysToRender.map((dateObj) => {
-              const dateStr = format(dateObj, 'yyyy-MM-dd');
-              const dayItem = daysMap.get(dateStr);
-              const isCurrentMonth = isSameMonth(dateObj, currentDate);
-              const isToday = isSameDay(dateObj, new Date());
-              const isFuture = dateStr > format(new Date(), 'yyyy-MM-dd');
+            {weeks.map((week, wIdx) => (
+              <View key={wIdx} style={styles.weekRow}>
+                {week.map((dateObj) => {
+                  const dateStr = format(dateObj, 'yyyy-MM-dd');
+                  const dayItem = daysMap.get(dateStr);
+                  const isCurrentMonth = isSameMonth(dateObj, currentDate);
+                  const isToday = isSameDay(dateObj, new Date());
+                  const isSelected = activeDateStr === dateStr;
 
-              const cellBg = getHeatmapColor(dayItem);
+                  const cellStyle = getDayCellStyle(dayItem, isToday, isSelected, isCurrentMonth);
 
-              return (
-                <TouchableOpacity
-                  key={dateStr}
-                  activeOpacity={0.7}
-                  onPress={() => setActiveDateStr(dateStr)}
-                  style={[
-                    styles.dayCell,
-                    {
-                      width: DAY_SIZE,
-                      height: DAY_HEIGHT,
-                      backgroundColor: cellBg,
-                      borderColor: isToday ? colors.primary : colors.borderLight,
-                      borderWidth: isToday ? 2 : 1,
-                      opacity: !isCurrentMonth ? 0.3 : 1,
-                    },
-                  ]}
-                >
-                  {/* Day number */}
-                  <Text
-                    style={[
-                      Typography.captionMedium,
-                      {
-                        color:
-                          dayItem && dayItem.completion_percentage === 100
-                            ? '#FFFFFF'
-                            : isToday
-                            ? colors.primary
-                            : colors.text,
-                        fontWeight: isToday ? '800' : '500',
-                      },
-                    ]}
-                  >
-                    {format(dateObj, 'd')}
-                  </Text>
+                  return (
+                    <View key={dateStr} style={styles.cellCol}>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => setActiveDateStr(dateStr)}
+                        style={[
+                          styles.dayCell,
+                          {
+                            backgroundColor: cellStyle.backgroundColor,
+                            borderColor: cellStyle.borderColor,
+                            borderWidth: cellStyle.borderWidth,
+                            opacity: cellStyle.opacity,
+                          },
+                        ]}
+                      >
+                        {/* Day number */}
+                        <Text
+                          style={[
+                            Typography.captionMedium,
+                            {
+                              color: cellStyle.textColor,
+                              fontWeight: isToday || isSelected || cellStyle.isComplete ? '800' : '500',
+                            },
+                          ]}
+                        >
+                          {format(dateObj, 'd')}
+                        </Text>
 
-                  {/* Mood emoji */}
-                  {dayItem?.mood ? (
-                    <Text style={{ fontSize: 11, lineHeight: 13 }}>
-                      {MOOD_EMOJI[dayItem.mood] ?? ''}
-                    </Text>
-                  ) : null}
+                        {/* Mood emoji */}
+                        {dayItem?.mood ? (
+                          <Text style={{ fontSize: 11, lineHeight: 13 }}>
+                            {MOOD_EMOJI[dayItem.mood] ?? ''}
+                          </Text>
+                        ) : null}
 
-                  {/* Indicators row: perfect star / skipped / note dot */}
-                  <View style={styles.indicatorsRow}>
-                    {dayItem?.is_perfect && (
-                      <Icon name="star" size={9} color={colors.perfect} />
-                    )}
-                    {dayItem?.is_skipped && (
-                      <Icon name="coffee" size={9} color={colors.skip} />
-                    )}
-                    {dayItem?.has_note && !dayItem?.mood && (
-                      <View style={[styles.dotIndicator, { backgroundColor: colors.accent }]} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+                        {/* Indicators row: perfect star / skipped / note dot */}
+                        <View style={styles.indicatorsRow}>
+                          {dayItem?.is_perfect && (
+                            <Icon name="star" size={9} color={colors.perfect} />
+                          )}
+                          {dayItem?.is_skipped && (
+                            <Icon name="coffee" size={9} color={colors.skip} />
+                          )}
+                          {dayItem?.has_note && !dayItem?.mood && (
+                            <View style={[styles.dotIndicator, { backgroundColor: colors.primary }]} />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         </View>
+
+        {/* Selected Day Quick Details Banner */}
+        {activeDateStr && (
+          <View style={[styles.dayBannerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.dayBannerTop}>
+              <View>
+                <Text style={[Typography.headline, { color: colors.text }]}>
+                  {format(parseISO(activeDateStr), 'EEEE, MMMM d, yyyy')}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textMuted }]}>
+                  {activeDayItem && activeDayItem.scheduled_plans_count > 0
+                    ? `${activeDayItem.completion_percentage}% completed (${activeDayItem.scheduled_plans_count} plans)`
+                    : 'No plans scheduled on this date'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setActiveDateStr(activeDateStr)}
+                style={[styles.viewDetailsBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={[Typography.captionMedium, { color: '#FFFFFF' }]}>Open Details</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -452,7 +588,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: 1,
     paddingVertical: Spacing.md,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   summaryItem: {
     alignItems: 'center',
@@ -460,31 +596,44 @@ const styles = StyleSheet.create({
   calendarCard: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: Spacing.md,
+    padding: Spacing.sm,
   },
   weekHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
+    paddingBottom: Spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  colHeader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
   },
   weekDayText: {
     fontSize: 12,
-    fontWeight: '600',
-    width: DAY_SIZE,
+    fontWeight: '700',
     textAlign: 'center',
   },
   grid: {
+    marginTop: 4,
+  },
+  weekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 2,
-    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  cellCol: {
+    flex: 1,
+    paddingHorizontal: 2,
   },
   dayCell: {
+    height: 52,
     borderRadius: Radius.sm,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingHorizontal: 1,
   },
   indicatorsRow: {
     flexDirection: 'row',
@@ -496,5 +645,21 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
+  },
+  dayBannerCard: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  dayBannerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  viewDetailsBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.sm,
   },
 });

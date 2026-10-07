@@ -1,16 +1,45 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { isRunningInExpoGo } from 'expo';
 
-// Configure foreground presentation behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+type NotificationsType = typeof import('expo-notifications');
+
+let notificationsModule: NotificationsType | null = null;
+
+/**
+ * Safely get the expo-notifications module.
+ * Expo SDK 53+ removed notification functionality from Expo Go on Android
+ * and throws an uncaught error at import time if accessed in Expo Go.
+ */
+function getNotifications(): NotificationsType | null {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  // Prevent crash in Expo Go on Android
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return null;
+  }
+
+  if (!notificationsModule) {
+    try {
+      notificationsModule = require('expo-notifications') as NotificationsType;
+      notificationsModule.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+    } catch (err) {
+      console.warn('[notifications] Unable to initialize expo-notifications:', err);
+      return null;
+    }
+  }
+
+  return notificationsModule;
+}
 
 export const DAILY_NOTIFICATION_ID = 'daily-8am-plans';
 export const DAILY_CHANNEL_ID = 'daily-plans';
@@ -19,7 +48,8 @@ export const DAILY_CHANNEL_ID = 'daily-plans';
  * Configure Android notification channels and request permission
  */
 export async function registerForNotificationsAsync(): Promise<boolean> {
-  if (Platform.OS === 'web') {
+  const Notifications = getNotifications();
+  if (!Notifications) {
     return false;
   }
 
@@ -47,7 +77,7 @@ export async function registerForNotificationsAsync(): Promise<boolean> {
 
     return finalStatus === 'granted';
   } catch (err) {
-    console.warn('Error setting up notifications permissions:', err);
+    console.warn('[notifications] Error setting up notification permissions:', err);
     return false;
   }
 }
@@ -56,12 +86,14 @@ export async function registerForNotificationsAsync(): Promise<boolean> {
  * Schedules a daily recurring notification at 8:00 AM for today's plans
  */
 export async function scheduleDaily8AMPlanNotification(hour: number = 8, minute: number = 0): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return false;
+  }
 
   try {
     const hasPermission = await registerForNotificationsAsync();
     if (!hasPermission) {
-      console.log('Notification permission not granted');
       return false;
     }
 
@@ -90,10 +122,9 @@ export async function scheduleDaily8AMPlanNotification(hour: number = 8, minute:
       },
     });
 
-    console.log(`Scheduled daily notification for ${hour}:${minute.toString().padStart(2, '0')}`);
     return true;
   } catch (error) {
-    console.error('Failed to schedule daily notification:', error);
+    console.warn('[notifications] Failed to schedule daily notification:', error);
     return false;
   }
 }
@@ -102,7 +133,8 @@ export async function scheduleDaily8AMPlanNotification(hour: number = 8, minute:
  * Cancels any active daily notification
  */
 export async function cancelDailyPlanNotification(): Promise<void> {
-  if (Platform.OS === 'web') return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
 
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -112,19 +144,37 @@ export async function cancelDailyPlanNotification(): Promise<void> {
       }
     }
   } catch (err) {
-    console.warn('Error cancelling notification:', err);
+    console.warn('[notifications] Error cancelling notification:', err);
   }
 }
 
 /**
  * Sends an instant test notification to verify notification delivery
  */
-export async function sendTestNotification(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+export async function sendTestNotification(): Promise<{ success: boolean; message?: string }> {
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return {
+      success: false,
+      message: 'Notifications are disabled in Expo Go on Android by Expo SDK 53+. They will be fully functional once built as an APK with EAS Build.',
+    };
+  }
+
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return {
+      success: false,
+      message: 'Notifications are not supported in this environment.',
+    };
+  }
 
   try {
     const hasPermission = await registerForNotificationsAsync();
-    if (!hasPermission) return false;
+    if (!hasPermission) {
+      return {
+        success: false,
+        message: 'Notification permissions were denied. Please enable them in system settings.',
+      };
+    }
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -137,25 +187,89 @@ export async function sendTestNotification(): Promise<boolean> {
       },
       trigger: null, // deliver immediately
     });
-    return true;
-  } catch (err) {
-    console.error('Failed to send test notification:', err);
-    return false;
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('[notifications] Failed to send test notification:', err);
+    return {
+      success: false,
+      message: err?.message || 'Failed to trigger test notification.',
+    };
   }
 }
 
 /**
- * Check if the daily reminder is currently active
+ * Sets up listeners for user tapping on a notification
  */
-export async function isDailyNotificationScheduled(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+export function setupNotificationListeners(onNavigate: (url: string) => void): () => void {
+  const Notifications = getNotifications();
+  if (!Notifications) return () => {};
 
   try {
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    return scheduled.some(
-      (s) => s.identifier === DAILY_NOTIFICATION_ID || s.content?.data?.type === 'daily-plan-reminder'
-    );
-  } catch {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const url = response.notification.request.content.data?.url;
+      if (url && typeof url === 'string') {
+        onNavigate(url);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  } catch (err) {
+    console.warn('[notifications] Error adding response listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Schedules a notification for a task on a specific calendar date and time
+ */
+export async function scheduleTaskReminderNotification(params: {
+  title: string;
+  dateStr: string; // "YYYY-MM-DD"
+  hour?: number;   // default 8
+  minute?: number; // default 0
+}): Promise<boolean> {
+  const Notifications = getNotifications();
+  if (!Notifications) return false;
+
+  try {
+    const hasPermission = await registerForNotificationsAsync();
+    if (!hasPermission) return false;
+
+    const [year, month, day] = params.dateStr.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day, params.hour ?? 8, params.minute ?? 0, 0);
+
+    // If target date/time is in the past, don't schedule
+    if (targetDate.getTime() <= Date.now()) {
+      return false;
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `📌 Task Reminder: ${params.title}`,
+        body: `Scheduled for today (${params.dateStr}). Don't forget to complete it!`,
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+        color: '#10B981',
+        data: {
+          url: '/today',
+          type: 'task-reminder',
+          date: params.dateStr,
+        },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: targetDate,
+        channelId: DAILY_CHANNEL_ID,
+      },
+    });
+
+    return true;
+  } catch (err) {
+    console.warn('[notifications] Failed to schedule task reminder:', err);
     return false;
   }
 }
+

@@ -6,8 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { scheduleDaily8AMPlanNotification } from '@/services/notifications';
-import * as Notifications from 'expo-notifications';
+import { scheduleDaily8AMPlanNotification, setupNotificationListeners } from '@/services/notifications';
 import { router } from 'expo-router';
 
 // Prevent auto hiding before app is ready
@@ -31,15 +30,12 @@ export default function RootLayout() {
     scheduleDaily8AMPlanNotification(8, 0).catch(() => {});
 
     // Listen for notification taps to navigate to Today
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const url = response.notification.request.content.data?.url;
-      if (url) {
-        router.push(url as any);
-      }
+    const cleanupListeners = setupNotificationListeners((url) => {
+      router.push(url as any);
     });
 
     return () => {
-      responseSubscription.remove();
+      cleanupListeners();
     };
   }, []);
 
