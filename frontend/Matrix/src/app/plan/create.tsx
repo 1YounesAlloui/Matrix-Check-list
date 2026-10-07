@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { format } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { useCreatePlanMutation } from '@/hooks/useMutations';
 import { useTemplatesQuery } from '@/hooks/useQueries';
 import { trackingApi } from '@/services/api';
@@ -58,6 +58,8 @@ export default function CreatePlanScreen() {
   const [intervalDays, setIntervalDays] = useState('2');
   const [threshold, setThreshold] = useState('100');
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [oneTimeDate, setOneTimeDate] = useState<Date>(new Date());
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   const toggleWeekday = (day: number) => {
     if (selectedWeekdays.includes(day)) {
@@ -75,11 +77,20 @@ export default function CreatePlanScreen() {
     }
 
     const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const oneTimeDateStr = format(oneTimeDate, 'yyyy-MM-dd');
+
+    if (scheduleType === 'one_time' && !oneTimeDateStr) {
+      Alert.alert('Required', 'Please select a date for the one-time plan.');
+      return;
+    }
+
     const scheduleConfig =
       scheduleType === 'weekdays'
         ? { weekdays: selectedWeekdays }
         : scheduleType === 'every_n_days'
         ? { interval: parseInt(intervalDays, 10) || 2 }
+        : scheduleType === 'one_time'
+        ? { date: oneTimeDateStr }
         : {};
 
     const thresholdNum = Math.min(100, Math.max(1, parseInt(threshold, 10) || 100));
@@ -93,7 +104,7 @@ export default function CreatePlanScreen() {
         schedule_type: scheduleType,
         schedule_config: scheduleConfig,
         completion_threshold: thresholdNum,
-        start_date: todayStr,
+        start_date: scheduleType === 'one_time' ? oneTimeDateStr : todayStr,
       });
       safeGoBack();
     } catch {
@@ -343,6 +354,99 @@ export default function CreatePlanScreen() {
             </View>
           )}
 
+          {/* One-Time Date Picker */}
+          {scheduleType === 'one_time' && (
+            <View style={{ marginTop: Spacing.md }}>
+              <Text style={[Typography.captionMedium, { color: colors.textMuted, marginBottom: Spacing.sm }]}>
+                SELECT DATE
+              </Text>
+
+              {/* Month navigation */}
+              <View style={styles.calMonthRow}>
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                  style={styles.calNavBtn}
+                >
+                  <Text style={{ color: colors.primary, fontSize: 18 }}>{'<'}</Text>
+                </TouchableOpacity>
+                <Text style={[Typography.headline, { color: colors.text }]}>
+                  {format(calendarMonth, 'MMMM yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                  style={styles.calNavBtn}
+                >
+                  <Text style={{ color: colors.primary, fontSize: 18 }}>{'>'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Weekday headers */}
+              <View style={styles.calWeekRow}>
+                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                  <Text key={i} style={[styles.calWeekLabel, { color: colors.textDim }]}>{d}</Text>
+                ))}
+              </View>
+
+              {/* Days grid */}
+              <View style={styles.calGrid}>
+                {(() => {
+                  const monthStart = startOfMonth(calendarMonth);
+                  const monthEnd = endOfMonth(calendarMonth);
+                  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+                  const allDays = eachDayOfInterval({ start: gridStart, end: monthEnd });
+                  // Pad to full weeks
+                  const totalCells = Math.ceil(allDays.length / 7) * 7;
+                  const paddedDays = [...allDays];
+                  while (paddedDays.length < totalCells) {
+                    const last = paddedDays[paddedDays.length - 1];
+                    paddedDays.push(new Date(last.getTime() + 86400000));
+                  }
+                  return paddedDays.map((day, idx) => {
+                    const inMonth = isSameMonth(day, calendarMonth);
+                    const isSelected = isSameDay(day, oneTimeDate);
+                    const isTodayDate = isToday(day);
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        onPress={() => { if (inMonth) setOneTimeDate(day); }}
+                        style={[
+                          styles.calDay,
+                          isSelected && { backgroundColor: colors.primary, borderRadius: 20 },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            Typography.captionMedium,
+                            {
+                              color: !inMonth
+                                ? colors.textDim
+                                : isSelected
+                                ? '#FFFFFF'
+                                : isTodayDate
+                                ? colors.primary
+                                : colors.text,
+                              fontWeight: isTodayDate && !isSelected ? '700' : '400',
+                            },
+                          ]}
+                        >
+                          {format(day, 'd')}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  });
+                })()}
+              </View>
+
+              {/* Selected date display */}
+              <View style={[styles.selectedDateBadge, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
+                <Icon name="calendar-check" size={16} color={colors.primary} />
+                <Text style={[Typography.captionMedium, { color: colors.primary, marginLeft: 8 }]}>
+                  {format(oneTimeDate, 'EEEE, MMMM d, yyyy')}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Completion Threshold */}
           <View style={{ marginTop: Spacing.md }}>
             <Text style={[Typography.captionMedium, { color: colors.textMuted }]}>
@@ -469,5 +573,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  calMonthRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  calNavBtn: {
+    padding: Spacing.sm,
+  },
+  calWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  calWeekLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: Spacing.sm,
+    borderWidth: 1,
   },
 });
