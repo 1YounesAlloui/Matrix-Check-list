@@ -10,7 +10,10 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+      "buildType": "apk"
+      },
+      "env": {
+      "EXPO_PUBLIC_API_URL": "https://backend-six-gilt-v4cys0bvp7.vercel.app/api"
       }
     },
     "production": {
