@@ -37,6 +37,7 @@ urlpatterns = [
 
     # ── Completions ───────────────────────────────────────────────────────────
     path("completions/toggle/", toggle, name="completion-toggle"),
+    path("toggle/", toggle, name="toggle-alias"),
 
     # ── Aggregated views ──────────────────────────────────────────────────────
     path("today/", today_view, name="today"),

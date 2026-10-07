@@ -17,7 +17,7 @@ export const useAuthStore = create<AppPreferencesState>((set) => ({
     email: 'local@matrix.app',
   },
   isAuthenticated: true,
-  theme: 'dark',
+  theme: 'light',
 
   setTheme: (theme) => set({ theme }),
   setUser: (userUpdates) =>

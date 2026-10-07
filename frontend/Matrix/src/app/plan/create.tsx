@@ -352,7 +352,7 @@ export default function CreatePlanScreen() {
               value={threshold}
               onChangeText={setThreshold}
               keyboardType="numeric"
-              placeholder="100"
+              placeholder="0"
               placeholderTextColor={colors.textDim}
               style={[
                 styles.input,

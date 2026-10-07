@@ -103,7 +103,7 @@ export const tasksApi = {
 
 export const trackingApi = {
   toggle: async (taskId: number, dateStr: string): Promise<ToggleResponse> => {
-    const res = await api.post<ToggleResponse>('/toggle/', {
+    const res = await api.post<ToggleResponse>('/completions/toggle/', {
       task: taskId,
       date: dateStr,
     });

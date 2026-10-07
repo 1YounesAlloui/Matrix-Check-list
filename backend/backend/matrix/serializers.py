@@ -142,7 +142,9 @@ class ToggleSerializer(serializers.Serializer):
     date = serializers.DateField()
 
     def validate_date(self, value):
-        if value > date.today():
+        from django.utils import timezone
+        today = timezone.localdate()
+        if value > today:
             raise serializers.ValidationError("Cannot toggle a future date.")
         return value
 

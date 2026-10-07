@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Radius, Spacing, Typography } from '@/constants/theme';
 import { confirmAction } from '@/utils/dialog';
+import { sendTestNotification, scheduleDaily8AMPlanNotification } from '@/services/notifications';
 
 export default function TodayScreen() {
   const { colors } = useThemeColors();
@@ -34,6 +35,27 @@ export default function TodayScreen() {
   const skipMutation = useSkipDayMutation();
 
   const [activeBottomSheetDate, setActiveBottomSheetDate] = useState<string | null>(null);
+
+  const handleNotificationPress = () => {
+    Alert.alert(
+      'Daily 8:00 AM Reminder',
+      "Matrix will send you a notification every day at 8:00 AM about today's plans.\n\nWould you like to send a test notification right now?",
+      [
+        { text: 'Close', style: 'cancel' },
+        {
+          text: 'Send Test Now',
+          onPress: async () => {
+            const success = await sendTestNotification();
+            if (success) {
+              Alert.alert('Notification Sent! 🔔', 'Check your device notifications.');
+            } else {
+              Alert.alert('Permission Required', 'Please enable notifications in your device settings.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleSkipPlan = (planId: number, planName: string) => {
     confirmAction(
@@ -81,6 +103,17 @@ export default function TodayScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+            <TouchableOpacity
+              onPress={handleNotificationPress}
+              style={[styles.noteButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityLabel="Daily notification settings"
+            >
+              <Icon
+                name="bell-ring-outline"
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
             <ThemeToggle size={42} />
             <TouchableOpacity
               onPress={() => setActiveBottomSheetDate(todayStr)}
