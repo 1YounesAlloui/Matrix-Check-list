@@ -1,33 +1,67 @@
 import { Platform } from 'react-native';
 
 export const Palette = {
+  // Greens
   emerald: '#10B981',
   forest: '#059669',
   mint: '#34D399',
   teal: '#0D9488',
+  seafoam: '#14B8A6',
   lime: '#84CC16',
+  chartreuse: '#65A30D',
+  // Blues & Purples
   cyan: '#06B6D4',
+  sky: '#0EA5E9',
   blue: '#3B82F6',
+  navy: '#1D4ED8',
   indigo: '#6366F1',
   violet: '#8B5CF6',
+  purple: '#A855F7',
+  fuchsia: '#D946EF',
+  lavender: '#C084FC',
+  // Warm
   amber: '#F59E0B',
-  rose: '#F43F5E',
+  gold: '#EAB308',
   orange: '#F97316',
+  coral: '#FB923C',
+  rose: '#F43F5E',
+  crimson: '#DC2626',
+  pink: '#EC4899',
+  // Neutral
+  sienna: '#B45309',
+  slate: '#64748B',
 } as const;
 
 export const PlanColorPresets = [
+  // Greens row
   Palette.emerald,
   Palette.forest,
   Palette.mint,
   Palette.teal,
+  Palette.seafoam,
   Palette.lime,
+  Palette.chartreuse,
+  // Blues & Purples row
   Palette.cyan,
+  Palette.sky,
   Palette.blue,
+  Palette.navy,
   Palette.indigo,
   Palette.violet,
+  Palette.purple,
+  Palette.fuchsia,
+  Palette.lavender,
+  // Warm row
   Palette.amber,
-  Palette.rose,
+  Palette.gold,
   Palette.orange,
+  Palette.coral,
+  Palette.rose,
+  Palette.crimson,
+  Palette.pink,
+  // Neutral
+  Palette.sienna,
+  Palette.slate,
 ];
 
 export const PlanIcons = [
